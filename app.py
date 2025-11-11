@@ -101,8 +101,8 @@ class DictionaryApp(QMainWindow):
         """是否显示文本ID改变时的处理"""
         self.show_text_id = checked
         # 如果有搜索结果，重新显示
-        if self.search_results:
-            self.display_search_results(self.search_results)
+        # if self.search_results:
+        #     self.display_search_results(self.search_results)
     
     def on_search(self):
         """执行搜索"""
@@ -110,13 +110,14 @@ class DictionaryApp(QMainWindow):
         if not search_text:
             return
             
-        # 调用搜索函数（这里留空，实际实现时替换）
+        # TODO 调用搜索函数（这里留空，实际实现时替换）
         results = self.perform_search(search_text)
         self.search_results = results
         self.display_search_results(results)
         
     def perform_search(self, text):
         """执行搜索逻辑（留空待实现）"""
+        # TODO 执行搜索逻辑（留空待实现）
         # 这是一个示例返回值，实际使用时替换为真实的搜索逻辑
         # 返回格式: {text_id: (chinese_preview, english_preview)}
         return {
@@ -127,6 +128,7 @@ class DictionaryApp(QMainWindow):
     
     def display_search_results(self, results):
         """显示搜索结果"""
+        # TODO 检查效果进行优化
         self.results_list.clear()
         
         for text_id, (chinese, english) in results.items():
@@ -148,19 +150,19 @@ class DictionaryApp(QMainWindow):
                 display_text = f"{line1}\n{line2}"
                 
             item.setText(display_text)
-            item.setData(Qt.UserRole, text_id)  # 存储ID供点击时使用
+            item.setData(Qt.ItemDataRole.UserRole, text_id)  # 存储ID供点击时使用
             
             self.results_list.addItem(item)
     
     def on_result_clicked(self, item):
         """点击搜索结果时的处理"""
-        text_id = item.data(Qt.UserRole)
+        text_id = item.data(Qt.ItemDataRole.UserRole)
         detail_text = self.get_detail_text(text_id)
         self.detail_display.setHtml(detail_text)
         
     def get_detail_text(self, text_id):
         """获取详细文本（留空待实现）"""
-        # 暂时直接返回文本ID
+        # TODO 获取详细文本 暂时直接返回文本ID
         return f"<p>文本ID: {text_id}</p>"
     
     def show_help(self):
@@ -190,6 +192,7 @@ class HelpDialog(QDialog):
         
     def get_help_text(self):
         """获取帮助文本"""
+        # TODO 修改帮助文本
         return """
         <h2>中英互查词典使用说明</h2>
         <h3>基本功能</h3>
