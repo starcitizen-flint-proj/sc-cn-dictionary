@@ -1,243 +1,229 @@
 import sys
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                               QHBoxLayout, QLineEdit, QPushButton, QCheckBox, 
-                               QListWidget, QLabel, QListWidgetItem, QProgressBar,
-                               QMessageBox)
-from PySide6.QtCore import Qt
+from PySide6.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QLineEdit, QComboBox, QCheckBox, QListWidget,
+    QTextBrowser, QListWidgetItem, QDialog, QLabel, QSizePolicy
+)
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QKeyEvent
 
-from DataFetch import DataFetchThread
 
 class DictionaryApp(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("字典应用 - 加载中...")
-        self.setGeometry(300, 300, 800, 600)
+        self.setWindowTitle("中英互查词典")
+        self.setMinimumSize(600, 500)
         
-        # 初始化为空数据，等待网络数据加载
-        self.dictionary_data = []
+        # 初始化设置变量
+        self.search_mode = "双边搜索"
+        self.fuzzy_search = False
+        self.include_long_text = False
+        self.show_text_id = False
         
-        self.setup_ui()
-        self.connect_signals()
+        self.init_ui()
         
-        # 启动数据抓取
-        self.start_data_fetch()
-        
-    def setup_ui(self):
-        """设置用户界面"""
+    def init_ui(self):
+        # 创建中心部件
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         
         # 主布局
         main_layout = QVBoxLayout(central_widget)
         main_layout.setSpacing(10)
-        main_layout.setContentsMargins(10, 10, 10, 10)
         
-        # 添加进度条
-        self.progress_bar = QProgressBar()
-        self.progress_bar.setMinimum(0)
-        self.progress_bar.setMaximum(0)  # 无限进度条
-        self.progress_label = QLabel("正在加载数据，请稍候...")
-        
-        # 第一行：搜索框和按钮
+        # 第一行：搜索栏
         search_layout = QHBoxLayout()
+        
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("请输入要搜索的单词...")
-        self.search_input.setEnabled(False)  # 初始禁用
+        self.search_input.setPlaceholderText("请输入搜索内容...")
+        self.search_input.returnPressed.connect(self.on_search)
+        
+        self.mode_combo = QComboBox()
+        self.mode_combo.addItems(["双边搜索", "中->英", "英->中"])
+        self.mode_combo.currentTextChanged.connect(self.on_mode_changed)
+        self.mode_combo.setMinimumWidth(100)
+        
         self.search_button = QPushButton("搜索")
-        self.search_button.setEnabled(False)  # 初始禁用
+        self.search_button.clicked.connect(self.on_search)
+        self.search_button.setMinimumWidth(80)
         
         search_layout.addWidget(self.search_input, 1)
+        search_layout.addWidget(self.mode_combo)
         search_layout.addWidget(self.search_button)
         
-        # 第二行：复选框
-        checkbox_layout = QHBoxLayout()
-        self.include_desc_checkbox = QCheckBox("包括描述")
-        self.fuzzy_search_checkbox = QCheckBox("模糊搜索")
-        self.include_desc_checkbox.setEnabled(False)  # 初始禁用
-        self.fuzzy_search_checkbox.setEnabled(False)  # 初始禁用
+        # 第二行：设置选项
+        options_layout = QHBoxLayout()
         
-        checkbox_layout.addWidget(self.include_desc_checkbox)
-        checkbox_layout.addWidget(self.fuzzy_search_checkbox)
-        checkbox_layout.addStretch()
+        self.fuzzy_checkbox = QCheckBox("模糊搜索")
+        self.fuzzy_checkbox.toggled.connect(lambda checked: setattr(self, 'fuzzy_search', checked))
+        
+        self.long_text_checkbox = QCheckBox("包括长文本")
+        self.long_text_checkbox.toggled.connect(lambda checked: setattr(self, 'include_long_text', checked))
+        
+        self.show_id_checkbox = QCheckBox("结果显示文本ID")
+        self.show_id_checkbox.toggled.connect(self.on_show_id_changed)
+        
+        options_layout.addWidget(self.fuzzy_checkbox)
+        options_layout.addWidget(self.long_text_checkbox)
+        options_layout.addWidget(self.show_id_checkbox)
+        options_layout.addStretch()
         
         # 第三行：搜索结果列表
-        self.result_list = QListWidget()
-        self.result_list.setMinimumHeight(300)
+        self.results_list = QListWidget()
+        self.results_list.itemClicked.connect(self.on_result_clicked)
+        self.results_list.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
-        # 第四行和第五行：程序控制的文本
-        self.info_label1 = QLabel("正在加载数据...")
-        self.info_label2 = QLabel("请等待数据加载完成")
+        # 第四行：搜索细节显示
+        self.detail_display = QTextBrowser()
+        self.detail_display.setReadOnly(True)
+        self.detail_display.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        
+        # 第五行：帮助按钮
+        self.help_button = QPushButton("帮助")
+        self.help_button.clicked.connect(self.show_help)
+        self.help_button.setMinimumHeight(30)
         
         # 添加所有组件到主布局
-        main_layout.addWidget(self.progress_label)
-        main_layout.addWidget(self.progress_bar)
         main_layout.addLayout(search_layout)
-        main_layout.addLayout(checkbox_layout)
-        main_layout.addWidget(self.result_list, 1)
-        main_layout.addWidget(self.info_label1)
-        main_layout.addWidget(self.info_label2)
+        main_layout.addLayout(options_layout)
+        main_layout.addWidget(self.results_list, 2)  # 占比2
+        main_layout.addWidget(self.detail_display, 1)  # 占比1
+        main_layout.addWidget(self.help_button)
         
-    def connect_signals(self):
-        """连接信号和槽"""
-        self.search_button.clicked.connect(self.perform_search)
-        self.search_input.returnPressed.connect(self.perform_search)
-        self.result_list.itemSelectionChanged.connect(self.on_item_selected)
+        # 存储搜索结果数据
+        self.search_results = {}
+        
+    def on_mode_changed(self, mode):
+        """搜索模式改变时的处理"""
+        self.search_mode = mode
+        
+    def on_show_id_changed(self, checked):
+        """是否显示文本ID改变时的处理"""
+        self.show_text_id = checked
+        # 如果有搜索结果，重新显示
+        if self.search_results:
+            self.display_search_results(self.search_results)
     
-    def start_data_fetch(self):
-        """启动数据抓取"""
-        self.fetch_thread = DataFetchThread()
-        self.fetch_thread.data_fetched.connect(self.on_data_loaded)
-        self.fetch_thread.progress_updated.connect(self.on_progress_updated)
-        self.fetch_thread.error_occurred.connect(self.on_error_occurred)
-        self.fetch_thread.start()
-    
-    def on_data_loaded(self, data):
-        """数据加载完成的回调"""
-        self.dictionary_data = data
-        
-        # 启用所有控件
-        self.search_input.setEnabled(True)
-        self.search_button.setEnabled(True)
-        self.include_desc_checkbox.setEnabled(True)
-        self.fuzzy_search_checkbox.setEnabled(True)
-        
-        # 隐藏进度条
-        self.progress_bar.hide()
-        self.progress_label.hide()
-        
-        # 更新窗口标题
-        self.setWindowTitle("字典应用")
-        
-        # 显示所有数据
-        self.display_results(self.dictionary_data)
-        self.info_label1.setText("数据加载完成")
-        self.info_label2.setText(f"共加载 {len(self.dictionary_data)} 条记录")
-    
-    def on_progress_updated(self, message):
-        """进度更新的回调"""
-        self.progress_label.setText(message)
-        self.info_label1.setText(message)
-    
-    def on_error_occurred(self, error_message):
-        """错误处理的回调"""
-        self.progress_label.setText("加载失败，使用本地数据")
-        QMessageBox.warning(self, "加载警告", error_message)
-        
-    def perform_search(self):
+    def on_search(self):
         """执行搜索"""
-        search_term = self.search_input.text().strip().lower()
-        
-        if not search_term:
-            results = self.dictionary_data
-            self.info_label1.setText("显示所有结果")
-            self.info_label2.setText(f"共找到 {len(results)} 条记录")
-        else:
-            results = []
-            include_desc = self.include_desc_checkbox.isChecked()
-            fuzzy_search = self.fuzzy_search_checkbox.isChecked()
+        search_text = self.search_input.text().strip()
+        if not search_text:
+            return
             
-            for item in self.dictionary_data:
-                match_found = False
-                search_fields = [item['english'].lower(), item['chinese'].lower()]
-                
-                if include_desc:
-                    search_fields.append(item['description'].lower())
-                
-                for field in search_fields:
-                    if fuzzy_search:
-                        if search_term in field:
-                            match_found = True
-                            break
-                    else:
-                        if field == search_term:
-                            match_found = True
-                            break
-                
-                if match_found:
-                    results.append(item)
-            
-            self.info_label1.setText(f"搜索关键词: '{search_term}'")
-            search_type = "模糊搜索" if fuzzy_search else "精确搜索"
-            desc_info = "（包括描述）" if include_desc else ""
-            self.info_label2.setText(f"{search_type}{desc_info} - 找到 {len(results)} 条结果")
+        # 调用搜索函数（这里留空，实际实现时替换）
+        results = self.perform_search(search_text)
+        self.search_results = results
+        self.display_search_results(results)
         
-        self.display_results(results)
+    def perform_search(self, text):
+        """执行搜索逻辑（留空待实现）"""
+        # 这是一个示例返回值，实际使用时替换为真实的搜索逻辑
+        # 返回格式: {text_id: (chinese_preview, english_preview)}
+        return {
+            "id001": ("你好", "Hello"),
+            "id002": ("世界", "World"),
+            "id003": ("词典", "Dictionary"),
+        }
     
-    def display_results(self, results):
+    def display_search_results(self, results):
         """显示搜索结果"""
-        self.result_list.clear()
+        self.results_list.clear()
         
-        for item in results:
-            display_text = f"[{item['id']}] {item['english']} - {item['chinese']}"
-            if self.include_desc_checkbox.isChecked():
-                display_text += f" ({item['description']})"
+        for text_id, (chinese, english) in results.items():
+            # 创建列表项
+            item = QListWidgetItem()
             
-            list_item = QListWidgetItem(display_text)
-            list_item.setData(Qt.ItemDataRole.UserRole, item)
-            self.result_list.addItem(list_item)
+            # 根据搜索模式确定显示顺序
+            if self.search_mode == "英->中":
+                line1 = english
+                line2 = chinese
+            else:
+                line1 = chinese
+                line2 = english
+            
+            # 构建显示文本
+            if self.show_text_id:
+                display_text = f"[{text_id}]\n{line1}\n{line2}"
+            else:
+                display_text = f"{line1}\n{line2}"
+                
+            item.setText(display_text)
+            item.setData(Qt.UserRole, text_id)  # 存储ID供点击时使用
+            
+            self.results_list.addItem(item)
     
-    def on_item_selected(self):
-        """处理列表项选择事件"""
-        current_item = self.result_list.currentItem()
-        if current_item:
-            data = current_item.data(Qt.ItemDataRole.UserRole)
-            if data:
-                self.info_label1.setText(f"选中: {data['english']} - {data['chinese']}")
-                self.info_label2.setText(f"ID: {data['id']}, 描述: {data['description']}")
+    def on_result_clicked(self, item):
+        """点击搜索结果时的处理"""
+        text_id = item.data(Qt.UserRole)
+        detail_text = self.get_detail_text(text_id)
+        self.detail_display.setHtml(detail_text)
+        
+    def get_detail_text(self, text_id):
+        """获取详细文本（留空待实现）"""
+        # 暂时直接返回文本ID
+        return f"<p>文本ID: {text_id}</p>"
+    
+    def show_help(self):
+        """显示帮助对话框"""
+        help_dialog = HelpDialog(self)
+        help_dialog.exec()
+
+
+class HelpDialog(QDialog):
+    """帮助对话框"""
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle("帮助")
+        self.setMinimumSize(400, 300)
+        
+        layout = QVBoxLayout(self)
+        
+        help_browser = QTextBrowser()
+        help_browser.setHtml(self.get_help_text())
+        help_browser.setOpenExternalLinks(True)
+        
+        close_button = QPushButton("关闭")
+        close_button.clicked.connect(self.close)
+        
+        layout.addWidget(help_browser)
+        layout.addWidget(close_button)
+        
+    def get_help_text(self):
+        """获取帮助文本"""
+        return """
+        <h2>中英互查词典使用说明</h2>
+        <h3>基本功能</h3>
+        <ul>
+            <li>输入中文或英文进行搜索</li>
+            <li>支持三种搜索模式：双边搜索、中译英、英译中</li>
+            <li>点击搜索结果查看详细信息</li>
+        </ul>
+        
+        <h3>搜索选项</h3>
+        <ul>
+            <li><b>模糊搜索</b>：启用模糊匹配功能</li>
+            <li><b>包括长文本</b>：在搜索结果中包含长文本内容</li>
+            <li><b>结果显示文本ID</b>：在搜索结果中显示文本的唯一标识符</li>
+        </ul>
+        
+        <h3>快捷键</h3>
+        <ul>
+            <li>Enter：执行搜索</li>
+        </ul>
+        
+        <p>更多信息请访问：<a href="https://example.com">官方网站</a></p>
+        """
+
 
 def main():
     app = QApplication(sys.argv)
     
-    app.setStyleSheet("""
-        QLineEdit {
-            padding: 8px;
-            border: 1px solid;
-            border-radius: 4px;
-            font-size: 14px;
-        }
-        QPushButton {
-            padding: 8px 16px;
-            border: 1px solid;
-            border-radius: 4px;
-            font-size: 14px;
-            font-weight: bold;
-            min-width: 60px;
-        }
-        QPushButton:disabled {
-            opacity: 0.6;
-        }
-        QCheckBox {
-            font-size: 12px;
-            spacing: 5px;
-        }
-        QCheckBox:disabled {
-            opacity: 0.6;
-        }
-        QListWidget {
-            border: 1px solid;
-            border-radius: 4px;
-            font-size: 13px;
-        }
-        QListWidget::item {
-            padding: 8px;
-            border-bottom: 1px solid;
-        }
-        QLabel {
-            font-size: 12px;
-            padding: 4px;
-        }
-        QProgressBar {
-            border: 1px solid;
-            border-radius: 4px;
-            text-align: center;
-            font-size: 12px;
-        }
-    """)
-    
-    window = DictionaryApp()
-    window.show()
+    # 创建并显示主窗口
+    dictionary = DictionaryApp()
+    dictionary.show()
     
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()
