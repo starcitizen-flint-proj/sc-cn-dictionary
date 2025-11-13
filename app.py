@@ -94,16 +94,27 @@ class DictionaryApp(QMainWindow):
         self.detail_display.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         
         # 第五行：帮助按钮
+        # TODO 添加对应功能
+        self.buttons_layout = QHBoxLayout()
         self.help_button = QPushButton("帮助")
         self.help_button.clicked.connect(self.show_help)
         self.help_button.setMinimumHeight(30)
+        self.refresh_file_button = QPushButton("从文件更新文本")
+        self.refresh_file_button.clicked.connect(self.show_help)
+        self.refresh_file_button.setMinimumHeight(30)
+        self.refresh_web_button = QPushButton("在线更新文本")
+        self.refresh_web_button.clicked.connect(self.show_help)
+        self.refresh_web_button.setMinimumHeight(30)
+        self.buttons_layout.addWidget(self.help_button, 1)
+        self.buttons_layout.addWidget(self.refresh_file_button, 2)
+        self.buttons_layout.addWidget(self.refresh_web_button, 2)
         
         # 添加所有组件到主布局
         main_layout.addLayout(search_layout)
         main_layout.addLayout(options_layout)
         main_layout.addWidget(self.results_list, 2)  # 占比2
         main_layout.addWidget(self.detail_display, 1)  # 占比1
-        main_layout.addWidget(self.help_button)
+        main_layout.addLayout(self.buttons_layout)
         
         # 存储搜索结果数据
         self.search_results = {}
