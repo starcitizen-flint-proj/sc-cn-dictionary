@@ -1,8 +1,10 @@
 import sys
+import traceback
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QPushButton, QLineEdit, QComboBox, QCheckBox, QListWidget,
-    QTextBrowser, QListWidgetItem, QDialog, QLabel, QSizePolicy
+    QTextBrowser, QListWidgetItem, QDialog, QLabel, QSizePolicy,
+    QMessageBox
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QKeyEvent
@@ -21,6 +23,19 @@ class DictionaryApp(QMainWindow):
         self.show_text_id = False
         
         self.init_ui()
+    
+    # NOTE 报错回调
+    def show_error_dialog(self, exception):
+        """显示错误对话框"""
+        error_msg = QMessageBox(self)
+        error_msg.setIcon(QMessageBox.Icon.Critical)
+        error_msg.setWindowTitle("错误")
+        error_msg.setText("程序执行过程中发生错误")
+        error_msg.setInformativeText(str(exception))
+        error_msg.setDetailedText(traceback.format_exc())
+        error_msg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        error_msg.exec()
+
         
     def init_ui(self):
         # 创建中心部件
@@ -106,14 +121,17 @@ class DictionaryApp(QMainWindow):
     
     def on_search(self):
         """执行搜索"""
-        search_text = self.search_input.text().strip()
-        if not search_text:
-            return
-            
-        # TODO 调用搜索函数（这里留空，实际实现时替换）
-        results = self.perform_search(search_text)
-        self.search_results = results
-        self.display_search_results(results)
+        try:
+            search_text = self.search_input.text().strip()
+            if not search_text:
+                return
+                
+            # TODO 调用搜索函数（这里留空，实际实现时替换）
+            results = self.perform_search(search_text)
+            self.search_results = results
+            self.display_search_results(results)
+        except Exception as e:
+            self.show_error_dialog(e)
         
     def perform_search(self, text):
         """执行搜索逻辑（留空待实现）"""
@@ -156,9 +174,13 @@ class DictionaryApp(QMainWindow):
     
     def on_result_clicked(self, item):
         """点击搜索结果时的处理"""
-        text_id = item.data(Qt.ItemDataRole.UserRole)
-        detail_text = self.get_detail_text(text_id)
-        self.detail_display.setHtml(detail_text)
+        try:
+            text_id = item.data(Qt.ItemDataRole.UserRole)
+            detail_text = self.get_detail_text(text_id)
+            self.detail_display.setHtml(detail_text)
+        except Exception as e:
+            self.show_error_dialog(e)
+
         
     def get_detail_text(self, text_id):
         """获取详细文本（留空待实现）"""
