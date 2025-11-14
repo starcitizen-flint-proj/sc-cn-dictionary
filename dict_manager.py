@@ -5,6 +5,9 @@ import logging
 from html import escape
 from resource_manager import ResourceManager, get_resource_manager
 
+# DEBUG
+from pprint import pprint
+
 class DictionaryManager:
     
     DB_PATH_REL     = './data/dict.db'
@@ -75,36 +78,48 @@ class DictionaryManager:
         self.create_db()
         self.refresh_db()
         
-    def search(self, keyword: str, limit: int = 100, use_db: list | str = 'cn', display_rsui: bool = False, display_length: int | None = None, max_length: int | None = None):
+    def search(self, keyword: str, limit: int = 100, use_db: list | str = ['cn', 'en'], display_rsui: bool = False, display_length: int | None = None, max_length: int | None = None):
         start = time.time()
         seg_keyword = ' '.join(jieba.cut(keyword))
         logging.info(f"开始搜索: {seg_keyword}")
         if isinstance(use_db, str):
             use_db = [use_db]
         
-        result = set()
+        result = []  # 改为list存储(text_id, rank)
         for db in use_db:
             logging.info(f"在数据库{db}里搜索")
             with sqlite3.connect(self.db_path) as conn:
-                # 根据是否设置max_length来构建不同的查询
                 if max_length is not None:
                     cursor = conn.execute(
-                        f"SELECT text_id FROM text_{db} "
-                        f"WHERE content MATCH ? AND LENGTH(raw_text) < ? LIMIT ?",
+                        f"SELECT text_id, rank FROM text_{db} "  # 添加rank
+                        f"WHERE content MATCH ? AND LENGTH(raw_text) < ? "
+                        f"ORDER BY rank "  # 按相关性排序
+                        f"LIMIT ?",
                         (seg_keyword, max_length, limit)
                     )
                 else:
                     cursor = conn.execute(
-                        f"SELECT text_id FROM text_{db} "
-                        f"WHERE content MATCH ? LIMIT ?",
+                        f"SELECT text_id, rank FROM text_{db} "
+                        f"WHERE content MATCH ? "
+                        f"ORDER BY rank "  # rank值越小越相关
+                        f"LIMIT ?",
                         (seg_keyword, limit)
                     )
                 cache = cursor.fetchall()
-                result.update(row[0] for row in cache)
-                
-        result = list(result)
-        logging.info(f"搜索完成，返回{len(result)}项，耗时{time.time() - start:.3f}s")
-        return self.__generate_result_sqlite(result, keyword, display_rsui, display_length)
+                result.extend(cache)
+        
+        result_dict = {}
+        for text_id, rank in result:
+            if text_id not in result_dict or rank < result_dict[text_id]:
+                result_dict[text_id] = rank
+        
+        weighted_ids = [(tid, trank) for tid, trank in result_dict.items()]
+        weighted_ids.sort(key=lambda x: x[1])
+        ids = [tid[0] for tid in weighted_ids]
+        
+        logging.info(f"搜索完成,返回{len(ids)}项,耗时{time.time() - start:.3f}s")
+        return ids, self.__generate_result_sqlite(ids, keyword, display_rsui, display_length)
+
                         
     def __generate_result_sqlite(self, text_ids: list, keyword: str, display_rsui: bool, display_length: int | None = None):
         # NOTE 这块display的实现有点尴尬，但是不影响使用

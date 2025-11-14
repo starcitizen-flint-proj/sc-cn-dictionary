@@ -180,9 +180,9 @@ class DictionaryApp(QMainWindow):
                 return
                 
             # TODO 检查实现
-            results = self.perform_search(search_text)
+            ranked_ids, results = self.perform_search(search_text)
             self.search_results = results
-            self.display_search_results(results)
+            self.display_search_results(ranked_ids, results)
         except Exception as e:
             self.show_error_dialog(e)
         
@@ -191,13 +191,13 @@ class DictionaryApp(QMainWindow):
         # TODO 添加设置影响的搜索和显示逻辑
         return self.dict_manager.search(text)
     
-    def display_search_results(self, results):
+    def display_search_results(self, ranked_ids, results):
         """显示搜索结果"""
         # TODO 检查效果进行优化
         # TODO 添加社区汉化显示的相关逻辑
         self.results_list.clear()
         
-        for text_id, text_data in results.items():
+        for text_id in ranked_ids:
             # 创建列表项
             item = QListWidgetItem(self.results_list)
             label = QLabel()
@@ -206,6 +206,7 @@ class DictionaryApp(QMainWindow):
             
             # TODO 根据搜索模式确定显示顺序
             
+            text_data = results[text_id]
             display_text = f"{text_data['cn']}<br/>{text_data['en']}"
             label.setText(display_text)
                 

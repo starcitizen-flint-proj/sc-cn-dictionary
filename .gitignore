@@ -4,4 +4,10 @@
 **.pyc
 **/__pycache__
 **/__pycache__/**
+
+**/dist
+**/dist/**
+**/build
+**/build/**
+
 ai_**.md
