@@ -6,6 +6,11 @@ from typing import Union, Optional
 import logging
 
 APP_NAME_STRING = 'sc-cn-dict'
+REQUIRED_PATHS = [
+    './config/',
+    './data/',
+    './data/text_files/'
+]
 
 # 配置日志
 logging.basicConfig(level=logging.INFO)
@@ -17,7 +22,7 @@ class ResourceManager:
     资源管理类，处理PyInstaller打包程序的资源访问
     """
     
-    def __init__(self, app_name: str = APP_NAME_STRING):
+    def __init__(self, app_name: str = APP_NAME_STRING, create_paths: str | None = None):
         """
         初始化资源管理器
         
@@ -32,6 +37,11 @@ class ResourceManager:
         logger.info(f"  - 应用名称: {app_name}")
         logger.info(f"  - 运行模式: {'打包模式(exe)' if self._is_frozen else '开发模式(.py)'}")
         logger.info(f"  - 基础路径: {self._base_path}")
+        
+        if create_paths is not None:
+            logger.info('创建外部路径')
+            for path in REQUIRED_PATHS:
+                self.get_external_path(path, create_paths)
     
     @staticmethod
     def _get_base_path() -> Path:
