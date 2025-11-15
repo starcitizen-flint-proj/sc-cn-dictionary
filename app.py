@@ -302,7 +302,7 @@ class HelpDialog(QDialog):
             <li>Enter：执行搜索</li>
         </ul>
         
-        <p>更多信息请访问：<a href="https://example.com">官方网站</a></p>
+        <p>更多信息请访问：<a href="https://robertsspaceindustries.com/">TODO</a></p>
         """
 
 class RefreshLocalThread(QThread):

@@ -79,8 +79,16 @@ class DictionaryManager:
         self.refresh_db()
         
     def search(self, keyword: str, limit: int = 100, use_db: list | str = ['cn', 'en'], display_rsui: bool = False, display_length: int | None = None, max_length: int | None = None):
+        
+        def escape_fts5(text):
+            # FTS5 特殊字符需要用双引号包裹或转义
+            special_chars = ['"', '-', '(', ')', '*', ':']
+            for char in special_chars:
+                text = text.replace(char, ' ')  # 替换为空格
+            return text.strip()
+        
         start = time.time()
-        seg_keyword = ' '.join(jieba.cut(keyword))
+        seg_keyword = ' '.join(jieba.cut(escape_fts5(keyword)))
         logging.info(f"开始搜索: {seg_keyword}")
         if isinstance(use_db, str):
             use_db = [use_db]
@@ -119,8 +127,7 @@ class DictionaryManager:
         
         logging.info(f"搜索完成,返回{len(ids)}项,耗时{time.time() - start:.3f}s")
         return ids, self.__generate_result_sqlite(ids, keyword, display_rsui, display_length)
-
-                        
+ 
     def __generate_result_sqlite(self, text_ids: list, keyword: str, display_rsui: bool, display_length: int | None = None):
         # NOTE 这块display的实现有点尴尬，但是不影响使用
         if display_rsui and 'rsui' in self.used_text:
