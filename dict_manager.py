@@ -3,6 +3,8 @@ import sqlite3
 import jieba
 import logging
 from html import escape
+from fuzzywuzzy import fuzz, process
+
 from resource_manager import ResourceManager, get_resource_manager
 
 # DEBUG
@@ -21,8 +23,11 @@ class DictionaryManager:
     def __init__(self, use_rsui = False) -> None:
         self.resource_manager = get_resource_manager()
         self.db_path = self.resource_manager.get_external_path(self.DB_PATH_REL)
+        logging.info(f"数据库路径：{self.db_path}")
         self.text_dict = dict()
+        self.refreshed = False
         self.used_text = ['en', 'cn', 'rsui'] if use_rsui else ['en', 'cn']
+        logging.info('词典数据管理器初始化完毕')
         
     def __conv_path(self, path: str, sep = '/'):
         path_list = path.split(sep)
@@ -61,12 +66,14 @@ class DictionaryManager:
             if not os.path.exists(text_file_path):
                 raise RuntimeError(f"文本文件{key}不存在，无法读取")
             with open(text_file_path, 'r', encoding='utf-8') as file:
+                logging.info(f"处理文件：{text_file_path}")
                 text_list = []
                 for line in file.readlines():
                     id, _, text = line.partition('=')
                     segmented = ' '.join(jieba.cut(text))
                     text_list.append((id, text, segmented))
             with sqlite3.connect(self.db_path) as conn:
+                logging.info(f"插入数据到表：text_{key}")
                 cursor = conn.cursor()
                 cursor.execute(f"DELETE FROM text_{key}")
                 cursor.executemany(f'''
@@ -75,10 +82,42 @@ class DictionaryManager:
                 ''', text_list)
     
     def full_refresh(self):
+        logging.info('完整刷新开始')
+        logging.info('开始建表')
         self.create_db()
+        logging.info('开始处理数据')
         self.refresh_db()
         
-    def search(self, keyword: str, limit: int = 100, use_db: list | str = ['cn', 'en'], display_rsui: bool = False, display_length: int | None = None, max_length: int | None = None):
+    def _fuzzy_search(
+        self, 
+        db, 
+        keyword, 
+        threshold: float = 0.6
+    ) -> list[tuple[str, float]]:
+        logging.info(f"模糊搜索{keyword} - 使用数据库{db}")
+        ret = []
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(f"SELECT text_id, raw_text from text_{db}")
+            all_texts = cursor.fetchall()
+            for text_id, raw_text in all_texts:
+                similarity = fuzz.partial_ratio(keyword.lower(), raw_text.lower()) / 100
+                # similarity = self.fuzzy.get_score(keyword, raw_text)
+                logging.debug(f"模糊匹配：{keyword} {raw_text} {similarity}")
+                if similarity >= threshold:
+                    ret.append((text_id, -similarity))
+                    logging.info(f"模糊匹配：{similarity} {raw_text}")
+        return ret
+
+    def search(
+        self, 
+        keyword: str, 
+        limit: int = 100, 
+        use_db: list | str = ['cn', 'en'], 
+        display_rsui: bool = False, 
+        display_length: int | None = None, 
+        max_length: int | None = None,
+        fuzzy_search: bool = False,
+    ):
         
         def escape_fts5(text):
             # FTS5 特殊字符需要用双引号包裹或转义
@@ -99,7 +138,7 @@ class DictionaryManager:
             with sqlite3.connect(self.db_path) as conn:
                 if max_length is not None:
                     cursor = conn.execute(
-                        f"SELECT text_id, rank FROM text_{db} "  # 添加rank
+                        f"SELECT text_id, rank-1 FROM text_{db} "  # 添加rank
                         f"WHERE content MATCH ? AND LENGTH(raw_text) < ? "
                         f"ORDER BY rank "  # 按相关性排序
                         f"LIMIT ?",
@@ -107,7 +146,7 @@ class DictionaryManager:
                     )
                 else:
                     cursor = conn.execute(
-                        f"SELECT text_id, rank FROM text_{db} "
+                        f"SELECT text_id, rank-1 FROM text_{db} "
                         f"WHERE content MATCH ? "
                         f"ORDER BY rank "  # rank值越小越相关
                         f"LIMIT ?",
@@ -115,6 +154,14 @@ class DictionaryManager:
                     )
                 cache = cursor.fetchall()
                 result.extend(cache)
+                
+        pprint(result)
+                
+        if fuzzy_search:
+            for db in use_db:
+                cache = self._fuzzy_search(db, keyword)
+                pprint(cache)
+                result += cache
         
         result_dict = {}
         for text_id, rank in result:
