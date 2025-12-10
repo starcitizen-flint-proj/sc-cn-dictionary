@@ -215,10 +215,11 @@ class DictionaryApp(QMainWindow):
         
     def perform_search(self, text):
         """执行搜索逻辑（留空待实现）"""
-        # TODO 添加设置影响的搜索和显示逻辑
+        # TODO 添加设置影响的 搜索和显示逻辑
         return self.dict_manager.search(
             keyword=text, 
-            fuzzy_search=self.fuzzy_search
+            fuzzy_search=self.fuzzy_search,
+            limit=self.get_search_limit()
         )
     
     def display_search_results(self, ranked_ids, results):
@@ -293,8 +294,6 @@ class DictionaryApp(QMainWindow):
             item.setData(Qt.ItemDataRole.UserRole, text_id)
             self.results_list.setItemWidget(item, container)
 
-
-    
     def on_result_clicked(self, item):
         """点击搜索结果时的处理"""
         try:
@@ -338,7 +337,6 @@ class DictionaryApp(QMainWindow):
         logging.error('数据库更新时发生错误')
         self.show_error_dialog(exception)
         self.enable_buttons(True)
-
 
 class HelpDialog(QDialog):
     """帮助对话框"""

@@ -27,6 +27,8 @@ class DictionaryManager:
         self.text_dict = dict()
         self.refreshed = False
         self.used_text = ['en', 'cn', 'rsui'] if use_rsui else ['en', 'cn']
+        
+        self.display_length = 100
         logging.info('词典数据管理器初始化完毕')
         
     def __conv_path(self, path: str, sep = '/'):
@@ -114,7 +116,6 @@ class DictionaryManager:
         limit: int = 100, 
         use_db: list | str = ['cn', 'en'], 
         display_rsui: bool = False, 
-        display_length: int | None = None, 
         max_length: int | None = None,
         fuzzy_search: bool = False,
     ):
@@ -155,12 +156,11 @@ class DictionaryManager:
                 cache = cursor.fetchall()
                 result.extend(cache)
                 
-        pprint(result)
+        logging.debug(result)
                 
         if fuzzy_search:
             for db in use_db:
                 cache = self._fuzzy_search(db, keyword)
-                pprint(cache)
                 result += cache
         
         result_dict = {}
@@ -170,12 +170,12 @@ class DictionaryManager:
         
         weighted_ids = [(tid, trank) for tid, trank in result_dict.items()]
         weighted_ids.sort(key=lambda x: x[1])
-        ids = [tid[0] for tid in weighted_ids]
+        ids = [tid[0] for tid in weighted_ids][:limit]
         
         logging.info(f"搜索完成,返回{len(ids)}项,耗时{time.time() - start:.3f}s")
-        return ids, self.__generate_result_sqlite(ids, keyword, display_rsui, display_length)
+        return ids, self.__generate_result_sqlite(ids, keyword, display_rsui)
  
-    def __generate_result_sqlite(self, text_ids: list, keyword: str, display_rsui: bool, display_length: int | None = None):
+    def __generate_result_sqlite(self, text_ids: list, keyword: str, display_rsui: bool, ):
         # NOTE 这块display的实现有点尴尬，但是不影响使用
         if display_rsui and 'rsui' in self.used_text:
             use_db = self.used_text
@@ -196,11 +196,21 @@ class DictionaryManager:
                 for text_id, raw_text in results:
                     if ret_data.get(text_id) is None:
                         ret_data[text_id] = dict()
-                    ret_data[text_id][db] = self.highlight(raw_text.replace('\n', ' '), keyword, display_length)
+                    ret_data[text_id][db] = self.highlight(raw_text.replace('\n', ' '), keyword)
         
         return ret_data
+    
+    def contains_chinese(self, text):
+        """
+        检查字符串是否包含中文字符
+        """
+        for char in text:
+            if '\u4e00' <= char <= '\u9fff':
+                return True
+        return False
 
-    def highlight(self, text, keyword, display_length: int | None = None):
+    def highlight(self, text, keyword):
+        display_length = self.display_length // 2 if self.contains_chinese(text) else self.display_length
         text = escape(text)
         pattern = re.compile(re.escape(keyword), re.IGNORECASE)
         hl_text = pattern.sub(lambda m: f'<b>{m.group()}</b>', text)
@@ -208,7 +218,8 @@ class DictionaryManager:
             return hl_text
         
         result = re.match(r"(.*?)(<b>.*</b>)(.*?)", hl_text)
-        if result is None: return hl_text
+        if result is None: 
+            return hl_text[:display_length] + '...'
         start, content, _ = result.groups()
         raw_content = content.replace('<b>', '').replace('</b>', '')
         
@@ -217,7 +228,7 @@ class DictionaryManager:
                 return start[:display_length] + '...'
             return f"{start}<b>{raw_content[:(display_length-len(start))]}</b>..."
 
-        return hl_text[:display_length]
+        return hl_text[:display_length] + '...'
     
     def get_full_text(self, text_id: str, use_rsui: bool = False):
         ret_data = dict()
